@@ -1,0 +1,29 @@
+﻿# Node modules
+node_modules/
+npm-debug.log*
+
+# Build outputs
+dist/
+build/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local
+
+# Audio samples (später konfigurieren)
+samples/
+*.wav
+*.mp3
+*.aiff
+netlify.toml
