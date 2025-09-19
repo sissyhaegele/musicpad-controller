@@ -27,3 +27,7 @@ samples/
 *.mp3
 *.aiff
 netlify.toml
+
+backups/
+*.backup.*
+*-backup-*
