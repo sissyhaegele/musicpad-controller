@@ -1,6 +1,8 @@
 ﻿import { useState, useRef, useEffect } from 'react';
-import { Volume2, StopCircle, Music, Loader2, AlertCircle, Upload, FileAudio } from 'lucide-react';
+import { Volume2, StopCircle, Music, Loader2, AlertCircle, Upload, FileAudio, Settings } from 'lucide-react';
 import audioSystem from './services/audioSystem';
+import storageService from './services/storageService';
+import PadSettings from './components/PadSettings';
 import './App.css';
 
 const PAD_COLORS = [
@@ -16,6 +18,8 @@ function App() {
   const [dragOverPad, setDragOverPad] = useState<number | null>(null);
   const [dragCounter, setDragCounter] = useState(0);
   const [recentlyLoaded, setRecentlyLoaded] = useState<Set<number>>(new Set());
+  const [settingsOpen, setSettingsOpen] = useState<number | null>(null);
+  const [padVolumes, setPadVolumes] = useState<{[key: string]: number}>({});
   const [pads, setPads] = useState(() => 
     Array.from({ length: 9 }, (_, i) => ({
       id: `pad-${i}`,
@@ -31,15 +35,44 @@ function App() {
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
   const dropZoneRef = useRef<HTMLDivElement>(null);
 
-  // Initialize AudioSystem on mount
+  // Initialize AudioSystem and Storage on mount
   useEffect(() => {
     const init = async () => {
+      // Initialize audio
       const success = await audioSystem.initialize();
       setAudioInitialized(success);
       if (success) {
         audioSystem.setMasterVolume(globalVolume);
       }
+
+      // Initialize storage and load saved samples
+      await storageService.init();
+      
+      // Get audio context from audioSystem
+      const ctx = (audioSystem as any).context;
+      if (ctx && success) {
+        console.log('Loading saved samples...');
+        const savedSamples = await storageService.loadAllSamples(ctx);
+        
+        if (savedSamples.size > 0) {
+          setPads(prev => prev.map((pad, index) => {
+            const saved = savedSamples.get(pad.id);
+            if (saved) {
+              console.log(`Restored sample for pad ${index + 1}: ${saved.label}`);
+              return {
+                ...pad,
+                audioBuffer: saved.audioBuffer,
+                label: saved.label
+              };
+            }
+            return pad;
+          }));
+          
+          console.log(`Loaded ${savedSamples.size} saved samples`);
+        }
+      }
     };
+    
     init();
 
     return () => {
@@ -73,7 +106,7 @@ function App() {
     }
   };
 
-  // Load audio file for a pad
+  // Load audio file for a pad with auto-save
   const loadAudioFile = async (padIndex: number, file: File) => {
     console.log(`Loading ${file.name} for pad ${padIndex + 1}`);
     
@@ -89,22 +122,27 @@ function App() {
       const audioBuffer = await audioSystem.loadAudioFile(file);
       
       if (audioBuffer) {
+        const label = file.name.replace(/\.[^/.]+$/, '');
+        
         setPads(prev => prev.map((p, i) => 
           i === padIndex 
             ? { 
                 ...p, 
                 audioBuffer,
-                label: file.name.replace(/\.[^/.]+$/, ''),
+                label,
                 isLoading: false,
                 hasError: false 
               } 
             : p
         ));
         
+        // Auto-save to storage
+        await storageService.saveSample(pads[padIndex].id, audioBuffer, label);
+        
         // Mark as recently loaded for animation
         setRecentlyLoaded(prev => new Set([...prev, padIndex]));
         
-        console.log(`Successfully loaded ${file.name} to pad ${padIndex + 1}`);
+        console.log(`Successfully loaded and saved ${file.name} to pad ${padIndex + 1}`);
       } else {
         throw new Error('Failed to decode audio');
       }
@@ -123,7 +161,7 @@ function App() {
     }
   };
 
-  // Load multiple files - CORRECTED VERSION
+  // Load multiple files
   const loadMultipleFiles = async (files: File[]) => {
     const audioFiles = files.filter(f => f.type.startsWith('audio/'));
     
@@ -179,7 +217,8 @@ function App() {
     }
     
     if (pad.audioBuffer) {
-      const playing = audioSystem.play(padId, pad.audioBuffer, 1);
+      const volume = padVolumes[padId] || 1;
+      const playing = audioSystem.play(padId, pad.audioBuffer, volume);
       if (playing) {
         setPads(prev => prev.map((p, i) => 
           i === padIndex ? { ...p, isPlaying: true } : p
@@ -205,9 +244,10 @@ function App() {
   };
 
   // Clear all pads
-  const clearAll = () => {
-    if (confirm('Clear all loaded samples?')) {
+  const clearAll = async () => {
+    if (confirm('Clear all loaded samples? This will also clear saved samples!')) {
       stopAll();
+      await storageService.clearAll();
       setPads(prev => prev.map((p, i) => ({
         ...p,
         audioBuffer: null,
@@ -215,7 +255,7 @@ function App() {
         isPlaying: false,
         hasError: false
       })));
-      console.log('All pads cleared');
+      console.log('All pads and storage cleared');
     }
   };
 
@@ -293,10 +333,8 @@ function App() {
     const audioFiles = files.filter(f => f.type.startsWith('audio/'));
     
     if (audioFiles.length === 1) {
-      // Single file - load to this specific pad
       loadAudioFile(padIndex, audioFiles[0]);
     } else if (audioFiles.length > 1) {
-      // Multiple files - load starting from this pad
       const availablePads = pads.slice(padIndex).filter(p => !p.audioBuffer);
       const indicesToUse = availablePads.slice(0, audioFiles.length).map((_, i) => padIndex + i);
       
@@ -348,7 +386,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [pads]);
+  }, [pads, padVolumes]);
 
   const systemStatus = audioSystem.getStatus();
   const loadedPads = pads.filter(p => p.audioBuffer).length;
@@ -434,7 +472,7 @@ function App() {
               onDrop={(e) => handlePadDrop(e, index)}
             >
               <button
-                className={`pad ${pad.isPlaying ? 'playing' : ''} ${pad.audioBuffer ? 'loaded' : ''} ${pad.hasError ? 'error' : ''}`}
+                className={`pad ${pad.isPlaying ? 'playing' : ''} ${pad.audioBuffer ? 'loaded' : ''} ${pad.hasError ? 'error' : ''} ${settingsOpen === index ? 'settings-open' : ''}`}
                 onClick={() => togglePad(index)}
                 disabled={pad.isLoading}
                 style={{ 
@@ -443,6 +481,18 @@ function App() {
                 } as React.CSSProperties}
               >
                 <div className="pad-number">{index + 1}</div>
+                
+                {/* Settings Button */}
+                <button
+                  className="pad-settings-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSettingsOpen(index);
+                  }}
+                  title="Pad Settings"
+                >
+                  <Settings size={16} />
+                </button>
                 
                 {pad.isLoading && (
                   <Loader2 className="pad-icon spinning" size={24} />
@@ -460,7 +510,9 @@ function App() {
                   <Upload className="pad-icon drop-hint" size={24} />
                 )}
                 
-                <div className="pad-label">{pad.label}</div>
+                <div className="pad-label" title={pad.label}>
+                  {pad.label.length > 15 ? pad.label.slice(0, 12) + '...' : pad.label}
+                </div>
               </button>
 
               <input
@@ -495,6 +547,56 @@ function App() {
           </div>
         </div>
       </footer>
+
+      {/* Settings Modal */}
+      {settingsOpen !== null && (
+        <PadSettings
+          padId={pads[settingsOpen].id}
+          padIndex={settingsOpen}
+          label={pads[settingsOpen].label}
+          volume={padVolumes[pads[settingsOpen].id] || 1}
+          hasAudio={!!pads[settingsOpen].audioBuffer}
+          onClose={() => setSettingsOpen(null)}
+          onSave={async (padId) => {
+            const pad = pads.find(p => p.id === padId);
+            if (pad?.audioBuffer) {
+              await storageService.saveSample(padId, pad.audioBuffer, pad.label);
+              console.log(`Saved ${pad.label} to storage`);
+            }
+          }}
+          onLoad={async (padId) => {
+            const ctx = (audioSystem as any).context;
+            if (ctx) {
+              const saved = await storageService.loadSample(padId, ctx);
+              if (saved) {
+                setPads(prev => prev.map(p =>
+                  p.id === padId 
+                    ? { ...p, audioBuffer: saved.audioBuffer, label: saved.label }
+                    : p
+                ));
+                console.log(`Loaded ${saved.label} from storage`);
+              }
+            }
+          }}
+          onClear={async (padId) => {
+            await storageService.deleteSample(padId);
+            setPads(prev => prev.map(p =>
+              p.id === padId 
+                ? { ...p, audioBuffer: null, label: `Pad ${pads.findIndex(pad => pad.id === padId) + 1}` }
+                : p
+            ));
+            setSettingsOpen(null);
+          }}
+          onVolumeChange={(padId, volume) => {
+            setPadVolumes(prev => ({ ...prev, [padId]: volume }));
+          }}
+          onLabelChange={(padId, label) => {
+            setPads(prev => prev.map(p =>
+              p.id === padId ? { ...p, label } : p
+            ));
+          }}
+        />
+      )}
     </div>
   );
 }
