@@ -471,3 +471,112 @@ body {
     font-size: 0.75rem;
   }
 }
+
+/* Pad Clear Button */
+.pad-clear-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 24px;
+  height: 24px;
+  background: rgba(255, 51, 102, 0.2);
+  border: 1px solid rgba(255, 51, 102, 0.5);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s;
+  color: #ff3366;
+}
+
+.pad:hover .pad-clear-btn {
+  opacity: 0.7;
+}
+
+.pad-clear-btn:hover {
+  opacity: 1 !important;
+  background: rgba(255, 51, 102, 0.4);
+  transform: scale(1.1);
+}
+
+/* Storage Info */
+.storage-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(0, 255, 136, 0.1);
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: var(--accent-primary);
+}
+
+/* Auto-Save Toggle */
+.auto-save-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--glass-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.auto-save-toggle:hover {
+  border-color: var(--accent-primary);
+}
+
+.auto-save-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
+/* Save Indicator Animation */
+@keyframes saveSuccess {
+  0% { 
+    background: rgba(0, 255, 136, 0.3);
+    transform: scale(1);
+  }
+  50% { 
+    background: rgba(0, 255, 136, 0.5);
+    transform: scale(1.05);
+  }
+  100% { 
+    background: rgba(0, 255, 136, 0.1);
+    transform: scale(1);
+  }
+}
+
+.pad.saving {
+  animation: saveSuccess 0.5s ease;
+}
+
+/* Clear All Button */
+.clear-all-btn {
+  padding: 0.75rem 1.25rem;
+  background: rgba(255, 51, 102, 0.1);
+  color: #ff3366;
+  border: 1px solid #ff3366;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.3s;
+}
+
+.clear-all-btn:hover {
+  background: #ff3366;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(255, 51, 102, 0.3);
+}
